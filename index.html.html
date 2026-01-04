@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Simple Snake Game</title>
+  <style>
+    :root { --bg:#111; --fg:#dfe; --accent:#6cf; --snake:#6f6; --food:#f66; }
+    html,body { height:100%; margin:0; font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial; background:var(--bg); color:var(--fg); display:flex; align-items:center; justify-content:center; }
+    .wrap { text-align:center; }
+    canvas { background:#042426; border:6px solid #0b3a35; display:block; margin:10px auto; image-rendering:pixelated; }
+    .info { display:flex; gap:12px; justify-content:center; align-items:center; margin-top:8px; }
+    .score { font-weight:700; color:var(--accent); }
+    .hint { opacity:.8; font-size:.9rem; }
+    button { background:var(--accent); color:#022; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; font-weight:600; }
+    button:active{ transform:translateY(1px); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Snake — Simple Game</h1>
+    <canvas id="game" width="400" height="400"></canvas>
+    <div class="info">
+      <div class="score">Score: <span id="score">0</span></div>
+      <div class="hint">Use arrow keys (or WASD). Press Space or click Restart to play again.</div>
+      <button id="restart">Restart</button>
+    </div>
+  </div>
+
+  <script>
+    // Config
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const grid = 20; // size of a cell in px
+    const cols = canvas.width / grid;
+    const rows = canvas.height / grid;
+    let speed = 8; // moves per second
+
+    // Game state
+    let snake;
+    let dir;       // current direction {x,y}
+    let nextDir;   // queued direction to avoid reversing
+    let food;
+    let scoreEl = document.getElementById('score');
+    let gameInterval;
+    let running = false;
+
+    function reset() {
+      const startX = Math.floor(cols / 2);
+      const startY = Math.floor(rows / 2);
+      snake = [];
+      for (let i = 0; i < 4; i++) snake.push({x: startX - i, y: startY});
+      dir = {x: 1, y: 0};
+      nextDir = {x: 1, y: 0};
+      food = randomFood();
+      scoreEl.textContent = '0';
+      running = true;
+      if (gameInterval) clearInterval(gameInterval);
+      gameInterval = setInterval(loop, 1000 / speed);
+      draw();
+    }
+
+    function randomFood() {
+      while (true) {
+        const f = { x: Math.floor(Math.random() * cols), y: Math.floor(Math.random() * rows) };
+        if (!snake.some(s => s.x === f.x && s.y === f.y)) return f;
+      }
+    }
+
+    function loop() {
+      if (!running) return;
+      // apply queued direction
+      dir = nextDir;
+
+      // compute new head
+      const head = snake[0];
+      const newHead = { x: head.x + dir.x, y: head.y + dir.y };
+
+      // wall collision (wrap-around) — if you prefer death on wall, change to gameOver()
+      if (newHead.x < 0) newHead.x = cols - 1;
+      if (newHead.x >= cols) newHead.x = 0;
+      if (newHead.y < 0) newHead.y = rows - 1;
+      if (newHead.y >= rows) newHead.y = 0;
+
+      // self-collision
+      if (snake.some(s => s.x === newHead.x && s.y === newHead.y)) {
+        gameOver();
+        return;
+      }
+
+      snake.unshift(newHead);
+
+      // eat food
+      if (newHead.x === food.x && newHead.y === food.y) {
+        // increase score and place new food
+        const newScore = parseInt(scoreEl.textContent, 10) + 1;
+        scoreEl.textContent = newScore;
+        food = randomFood();
+        // gradually increase speed every 5 points
+        if (newScore % 5 === 0) {
+          speed = Math.min(18, speed + 1);
+          clearInterval(gameInterval);
+          gameInterval = setInterval(loop, 1000 / speed);
+        }
+      } else {
+        snake.pop(); // move forward
+      }
+
+      draw();
+    }
+
+    function draw() {
+      // background
+      ctx.fillStyle = '#042426';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // draw food
+      ctx.fillStyle = '#f66';
+      drawCell(food.x, food.y);
+
+      // draw snake
+      for (let i = 0; i < snake.length; i++) {
+        const s = snake[i];
+        ctx.fillStyle = i === 0 ? '#9ff' : (i % 2 === 0 ? '#6f6' : '#46c');
+        drawCell(s.x, s.y);
+      }
+    }
+
+    function drawCell(cx, cy) {
+      ctx.fillRect(cx * grid + 1, cy * grid + 1, grid - 2, grid - 2);
+    }
+
+    function gameOver() {
+      running = false;
+      clearInterval(gameInterval);
+      // show simple overlay text
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#ffd';
+      ctx.font = '24px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Game Over', canvas.width / 2, canvas.height / 2 - 10);
+      ctx.font = '16px system-ui, sans-serif';
+      ctx.fillText('Press Space or Restart to play again', canvas.width / 2, canvas.height / 2 + 20);
+    }
+
+    // Input
+    window.addEventListener('keydown', (e) => {
+      if (!running && e.code === 'Space') { reset(); return; }
+      switch (e.code) {
+        case 'ArrowUp': case 'KeyW':    if (dir.y !== 1) nextDir = {x:0,y:-1}; break;
+        case 'ArrowDown': case 'KeyS':  if (dir.y !== -1) nextDir = {x:0,y:1}; break;
+        case 'ArrowLeft': case 'KeyA':  if (dir.x !== 1) nextDir = {x:-1,y:0}; break;
+        case 'ArrowRight': case 'KeyD': if (dir.x !== -1) nextDir = {x:1,y:0}; break;
+        case 'Space':                    reset(); break;
+      }
+    });
+
+    document.getElementById('restart').addEventListener('click', reset);
+
+    // Start
+    reset();
+  </script>
+</body>
+</html>
